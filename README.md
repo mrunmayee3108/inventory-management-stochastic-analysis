@@ -171,7 +171,6 @@ CR = Cu / (Cu + Co)
 SS = Z × σ × √(Lead Time)
 ```
 
----
 
 ## 🚀 Future Enhancements
 
@@ -184,11 +183,10 @@ SS = Z × σ × √(Lead Time)
 
 ## 👩‍💻 Contributors
 
-* **Mrunmayee Potdar** (@mrunmayee3108)
-* **Ekta Sawant** (@EktaSawant46)
-* **Mahi Pendkalkar** (@Mahii0107)
-* **Siddhi Thakur** (@Siddhi-S-Thakur)
-
+- **Mrunmayee Potdar** — @mrunmayee3108  
+- **Ekta Sawant** — @EktaSawant46  
+- **Mahi Pendkalkar** — @Mahii0107  
+- **Siddhi Thakur** — @Siddhi-S-Thakur  
 
 ## 💬 Support
 
