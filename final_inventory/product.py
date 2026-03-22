@@ -2,7 +2,7 @@ class Product:
     def __init__(self, name, category, unit, stock, reorder_point):
         self.name = name
         self.category = category
-        self.unit = unit
+        self.unit = unit 
         self.current_stock = stock
         self.reorder_point = reorder_point
 
