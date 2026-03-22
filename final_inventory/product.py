@@ -51,6 +51,7 @@ class PerishableProduct(Product):
 
 def default_products():
     return [
+        # Arguments: name, category, unit, stock, reorder_point, reorder_qty, shelf_life, sale_price, avg_demand
         PerishableProduct("Milk", "Dairy", "L", 140, 50, 100, 7, 35, 120),
         PerishableProduct("Strawberries", "Fruit", "kg", 22, 15, 40, 3, 80, 60),
         PerishableProduct("Leafy Greens", "Vegetable", "kg", 60, 30, 60, 4, 45, 80),
