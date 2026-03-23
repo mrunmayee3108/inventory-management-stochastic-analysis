@@ -1,35 +1,13 @@
-# ================================================================
-# app.py  —  InventoryGUI  (run this file)
-#
-#   python app.py
-#
-# Libraries: tkinter (UI) + matplotlib (charts)
-# No SQLite. Data lives in Python objects.
-#
-# OOP — ABSTRACTION:
-#   GUI calls inventory.add_stock(), mc.run() etc.
-#   It doesn't know how those work internally.
-#
-# Pages:
-#   Dashboard       — KPI cards, stock chart, alerts, log
-#   Manage Products — user-friendly add form + delete
-#   Simulation      — Monte Carlo + histograms
-#   Reports         — bar charts + last MC profit chart
-#   Spoilage        — freshness chart + advance-day button
-# ================================================================
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import time
 
-from product    import PerishableProduct
-from inventory  import Inventory
+from product import PerishableProduct
+from inventory import Inventory
 from stochastic import MonteCarloSimulator
 
-
-# ── Colours ───────────────────────────────────────────────────
 C = {
     "bg":     "#F8FAF5",  "sidebar": "#1C3A2A",  "hover":  "#2A5240",
     "card":   "#FFFFFF",  "border":  "#E0E8E2",   "text":   "#1A2E22",
@@ -40,16 +18,7 @@ C = {
     "blu_bg": "#EBF5FB",
 }
 
-
 class InventoryGUI:
-    """
-    Main application class — one method per page.
-
-    ABSTRACTION (OOP): The GUI just calls simple methods like
-    inventory.add_stock() and mc.run(). It doesn't know about
-    the random number generator or any internal calculations.
-    """
-
     def __init__(self, root):
         self.root = root
         self.root.title("AgriStock — Stochastic Perishable Inventory System")
@@ -57,14 +26,12 @@ class InventoryGUI:
         self.root.configure(bg=C["bg"])
         self.root.minsize(1050, 640)
 
-        self.inv             = Inventory()   # all products + history
-        self.last_mc_profits = []            # saved from last simulation run
+        self.inv = Inventory()  
+        self.last_mc_profits = []            
 
         self._build_window()
         self._start_clock()
         self.show_dashboard()
-
-    # ── Window ────────────────────────────────────────────────
 
     def _build_window(self):
         self._build_topbar()
@@ -78,7 +45,7 @@ class InventoryGUI:
         bar = tk.Frame(self.root, bg=C["sidebar"], height=52)
         bar.pack(fill="x")
         bar.pack_propagate(False)
-        tk.Label(bar, text="🌿  AgriStock",
+        tk.Label(bar, text="🌿 AgriStock",
                  bg=C["sidebar"], fg="white",
                  font=("Segoe UI",15,"bold")).pack(side="left", padx=18)
         tk.Label(bar, text="Stochastic Perishable Inventory System",
@@ -87,10 +54,10 @@ class InventoryGUI:
         self.clock_lbl = tk.Label(bar, bg=C["sidebar"], fg="#A8C9B0",
                                    font=("Segoe UI",10))
         self.clock_lbl.pack(side="right", padx=18)
-        n = len(self.inv.low_stock())
-        tk.Label(bar, text=f"  {n} low-stock alerts  ",
+        self.alert_lbl = tk.Label(bar, text="",
                  bg=C["red"], fg="white",
-                 font=("Segoe UI",9,"bold")).pack(side="right", padx=6, pady=12)
+                 font=("Segoe UI",9,"bold"))
+        self.alert_lbl.pack(side="right", padx=6, pady=12)
 
     def _build_sidebar(self, parent):
         sb = tk.Frame(parent, bg=C["sidebar"], width=200)
@@ -99,11 +66,11 @@ class InventoryGUI:
         tk.Frame(sb, bg=C["sidebar"], height=14).pack()
         self.nav_btns = {}
         for label, cmd in [
-            ("📊  Dashboard",      self.show_dashboard),
+            ("📊  Dashboard", self.show_dashboard),
             ("📦  Manage Products", self.show_manage),
-            ("🎲  Simulation",      self.show_simulation),
-            ("📈  Reports",         self.show_reports),
-            ("🗑️  Spoilage",        self.show_spoilage),
+            ("🎲  Simulation", self.show_simulation),
+            ("📈  Reports", self.show_reports),
+            ("🗑️  Spoilage", self.show_spoilage),
         ]:
             b = tk.Button(sb, text=label,
                           bg=C["sidebar"], fg="white",
@@ -128,6 +95,10 @@ class InventoryGUI:
             b.config(bg=C["hover"] if l == label else C["sidebar"])
         cmd()
 
+    def _refresh_alert(self):
+        n = len(self.inv.low_stock())
+        self.alert_lbl.config(text=f"  {n} low-stock alerts  ")
+
     def _clear(self):
         for w in self.content.winfo_children():
             w.destroy()
@@ -137,8 +108,6 @@ class InventoryGUI:
             self.clock_lbl.config(text=time.strftime("  %a %d %b   %H:%M:%S  "))
             self.root.after(1000, tick)
         tick()
-
-    # ── Widget helpers ────────────────────────────────────────
 
     def _card(self, parent, **kw):
         return tk.Frame(parent, bg=C["card"],
@@ -187,44 +156,38 @@ class InventoryGUI:
         tk.Label(c, text=sub, bg=C["card"], fg=C["muted"],
                  font=("Segoe UI",8)).pack(anchor="w", padx=12, pady=(0,10))
 
-    # ============================================================
-    #  PAGE 1 — DASHBOARD
-    # ============================================================
-
     def show_dashboard(self):
         self._clear()
+        self._refresh_alert()
         page = self._scrollable(self.content)
         tk.Label(page, text="Dashboard",
                  bg=C["bg"], fg=C["text"],
                  font=("Segoe UI",20,"bold")).pack(
                      anchor="w", padx=20, pady=(14,8))
 
-        inv      = self.inv
-        low      = inv.low_stock()
+        inv = self.inv
+        low = inv.low_stock()
         expiring = inv.expiring_soon()
-        total    = sum(p.current_stock for p in inv.products)
+        total = sum(p.current_stock for p in inv.products)
 
-        # KPI cards
         kf = tk.Frame(page, bg=C["bg"])
         kf.pack(fill="x", padx=20, pady=(0,10))
-        self._kpi(kf, 0, "Total Stock",   f"{total:.0f} units", C["green"], "All products")
-        self._kpi(kf, 1, "Low Stock",     str(len(low)),        C["red"],   "Need reorder")
-        self._kpi(kf, 2, "Expiring Soon", str(len(expiring)),   C["amber"], "Within 3 days")
-        self._kpi(kf, 3, "Products",      str(len(inv.products)),C["blue"], "In warehouse")
+        self._kpi(kf, 0, "Total Stock", f"{total:.0f} units", C["green"], "All products")
+        self._kpi(kf, 1, "Low Stock", str(len(low)), C["red"], "Need reorder")
+        self._kpi(kf, 2, "Expiring Soon", str(len(expiring)), C["amber"], "Within 3 days")
+        self._kpi(kf, 3, "Products", str(len(inv.products)),C["blue"], "In warehouse")
 
-        # Middle: chart + alerts
         mid = tk.Frame(page, bg=C["bg"])
         mid.pack(fill="x", padx=20, pady=(0,10))
         mid.columnconfigure(0, weight=3); mid.columnconfigure(1, weight=2)
 
-        # Stock bar chart
         cc = self._card(mid)
         cc.grid(row=0, column=0, padx=(0,8), sticky="nsew")
         self._section(cc, "Stock Levels by Product")
-        names  = [p.name for p in inv.products]
+        names = [p.name for p in inv.products]
         stocks = [p.current_stock for p in inv.products]
-        rps    = [p.reorder_point for p in inv.products]
-        cols   = [C["red"] if s < r else C["green"] for s,r in zip(stocks,rps)]
+        rps = [p.reorder_point for p in inv.products]
+        cols = [C["red"] if s < r else C["green"] for s,r in zip(stocks,rps)]
         fig, ax = plt.subplots(figsize=(6,3.4))
         fig.patch.set_facecolor("white"); ax.set_facecolor("#f9fafb")
         ax.barh(names, stocks, color=cols, height=0.55)
@@ -239,7 +202,6 @@ class InventoryGUI:
             fill="both", expand=True, padx=8, pady=(0,8))
         plt.close(fig)
 
-        # Alerts
         ac = self._card(mid)
         ac.grid(row=0, column=1, sticky="nsew")
         self._section(ac, "🔔  Alerts")
@@ -249,7 +211,7 @@ class InventoryGUI:
                      font=("Segoe UI",9)).pack(padx=12, pady=6, anchor="w")
         for p in low:
             f = tk.Frame(ac, bg=C["red_bg"]); f.pack(fill="x", padx=10, pady=2)
-            tk.Label(f, text=f"⚠  {p.name}: {p.current_stock:.0f} {p.unit} left",
+            tk.Label(f, text=f"⚠️  {p.name}: {p.current_stock:.0f} {p.unit} left",
                      bg=C["red_bg"], fg=C["red"], font=("Segoe UI",9),
                      wraplength=240).pack(anchor="w", padx=8, pady=4)
         for p in expiring:
@@ -258,7 +220,6 @@ class InventoryGUI:
                      bg=C["amb_bg"], fg=C["amber"], font=("Segoe UI",9),
                      wraplength=240).pack(anchor="w", padx=8, pady=4)
 
-        # Transaction log
         tc = self._card(page)
         tc.pack(fill="x", padx=20, pady=(0,20))
         self._section(tc, "Recent Activity")
@@ -279,18 +240,9 @@ class InventoryGUI:
                          font=("Segoe UI",9), width=w,
                          anchor="w").pack(side="left", padx=4, pady=3)
 
-    # ============================================================
-    #  PAGE 2 — MANAGE PRODUCTS
-    # ============================================================
-
     def show_manage(self):
-        """
-        Three sections:
-          1. Simple 6-field form to add a product
-          2. Quick actions: delivery / sale / spoilage check
-          3. Full product list with DELETE button on every row
-        """
         self._clear()
+        self._refresh_alert()
         page = self._scrollable(self.content)
         tk.Label(page, text="Manage Products",
                  bg=C["bg"], fg=C["text"],
@@ -301,22 +253,20 @@ class InventoryGUI:
         top.pack(fill="x", padx=20, pady=(0,14))
         top.columnconfigure(0, weight=1); top.columnconfigure(1, weight=1)
 
-        # ── LEFT: Add product form ─────────────────────────────
         add_card = self._card(top)
         add_card.grid(row=0, column=0, padx=(0,8), sticky="nsew")
         self._section(add_card, "Add a New Product")
 
-        # Only fields a real user would know
         field_defs = [
-            ("Product Name",     "",    "e.g.  Carrots, Paneer, Apples"),
-            ("Category",         "Vegetable", "Vegetable / Fruit / Dairy / Bakery"),
-            ("Unit",             "kg",  "kg  /  litres  /  pcs"),
-            ("Current Stock",    "0",   "How many units do you have right now?"),
-            ("Reorder Point",    "20",  "Reorder when stock falls below this number"),
-            ("Reorder Quantity", "50",  "How many units to order each time"),
-            ("Shelf Life (days)","5",   "How many days before it expires"),
-            ("Sale Price (₹)",   "",    "Price you sell one unit for"),
-            ("Avg Daily Demand", "",    "Roughly how many units you sell per day"),
+            ("Product Name", "", "e.g.  Carrots, Paneer, Apples"),
+            ("Category", "Vegetable", "Vegetable / Fruit / Dairy / Bakery"),
+            ("Unit", "kg", "kg  /  litres  /  pcs"),
+            ("Current Stock", "0", "How many units do you have right now?"),
+            ("Reorder Point", "20", "Reorder when stock falls below this number"),
+            ("Reorder Quantity", "50", "How many units to order each time"),
+            ("Shelf Life (days)","5", "How many days before it expires"),
+            ("Sale Price (₹)", "", "Price you sell one unit for"),
+            ("Avg Daily Demand", "", "Roughly how many units you sell per day"),
         ]
         entries = {}
         for label, default, hint in field_defs:
@@ -334,7 +284,6 @@ class InventoryGUI:
                      font=("Segoe UI",8)).pack(side="left", padx=2)
             entries[label] = e
 
-        # Info box — tells user what gets auto-calculated
         info = tk.Frame(add_card, bg=C["blu_bg"])
         info.pack(fill="x", padx=14, pady=(6,0))
         tk.Label(info,
@@ -356,33 +305,31 @@ class InventoryGUI:
                 return
             try:
                 p = PerishableProduct(
-                    name        = name,
-                    category    = entries["Category"].get(),
-                    unit        = entries["Unit"].get(),
-                    stock       = float(entries["Current Stock"].get()),
+                    name = name,
+                    category = entries["Category"].get(),
+                    unit = entries["Unit"].get(),
+                    stock = float(entries["Current Stock"].get()),
                     reorder_point = int(entries["Reorder Point"].get()),
-                    reorder_qty   = int(entries["Reorder Quantity"].get()),
-                    shelf_life  = int(entries["Shelf Life (days)"].get()),
-                    sale_price  = float(entries["Sale Price (₹)"].get()),
-                    avg_demand  = float(entries["Avg Daily Demand"].get()),
+                    reorder_qty = int(entries["Reorder Quantity"].get()),
+                    shelf_life = int(entries["Shelf Life (days)"].get()),
+                    sale_price = float(entries["Sale Price (₹)"].get()),
+                    avg_demand = float(entries["Avg Daily Demand"].get()),
                 )
                 self.inv.add_product(p)
                 messagebox.showinfo(
                     "✅ Product Added",
                     f"'{name}' added to inventory!\n\n"
                     f"Auto-calculated values:\n"
-                    f"  Waste cost      = ₹{p.waste_cost} per unit\n"
-                    f"  Stockout cost   = ₹{p.stockout_cost} per unit\n"
-                    f"  Critical Ratio  = {p.critical_ratio()}")
+                    f"Waste cost = ₹{p.waste_cost} per unit\n"
+                    f"Stockout cost = ₹{p.stockout_cost} per unit\n"
+                    f"Critical Ratio = {p.critical_ratio()}")
                 self.show_manage()
             except ValueError as ex:
-                messagebox.showerror("Invalid Input",
-                                     f"Please check your numbers.\n\n{ex}")
+                messagebox.showerror("Invalid Input", f"Please check your numbers.\n\n{ex}")
 
         self._btn(add_card, "➕  Add Product",
                   C["green"], do_add).pack(fill="x", padx=14, pady=10)
 
-        # ── RIGHT: Quick actions ───────────────────────────────
         qa = self._card(top)
         qa.grid(row=0, column=1, sticky="nsew")
         self._section(qa, "Record Delivery / Sale")
@@ -435,7 +382,6 @@ class InventoryGUI:
         ]:
             self._btn(qa, txt, bg, cmd).pack(fill="x", padx=14, pady=3)
 
-        # ── Product table with DELETE button ───────────────────
         lc = self._card(page)
         lc.pack(fill="x", padx=20, pady=(0,20))
         self._section(lc, "All Products")
@@ -469,8 +415,7 @@ class InventoryGUI:
                 tk.Label(row, text=val, bg=rbg, fg=col,
                          font=("Segoe UI",9), width=w,
                          anchor="w").pack(side="left", padx=4, pady=6)
-
-            # Delete button — lambda captures p.name correctly
+                
             def make_del(name=p.name):
                 def _del():
                     if messagebox.askyesno(
@@ -490,22 +435,12 @@ class InventoryGUI:
                       command=make_del()
                       ).pack(side="left", padx=6)
 
-    # ============================================================
-    #  PAGE 3 — SIMULATION
-    # ============================================================
-
     def show_simulation(self):
-        """
-        Monte Carlo Simulation.
-        User picks a product and number of runs.
-        Shows 3 histograms + Critical Ratio + Safety Stock formula.
-        Can also run Drought scenario.
-        """
         self._clear()
+        self._refresh_alert()
         self.content.columnconfigure(1, weight=1)
         self.content.rowconfigure(0, weight=1)
 
-        # Left panel
         left = self._card(self.content)
         left.grid(row=0, column=0, sticky="nsew", padx=(10,5), pady=10)
         left.config(width=265); left.pack_propagate(False)
@@ -565,21 +500,19 @@ class InventoryGUI:
                  justify="left", padx=8, pady=6
                  ).pack(fill="x", side="bottom", padx=10, pady=8)
 
-        # Right panel
         right = tk.Frame(self.content, bg=C["bg"])
         right.grid(row=0, column=1, sticky="nsew", padx=(0,10), pady=10)
         right.columnconfigure(0, weight=1); right.rowconfigure(1, weight=1)
 
-        # Result KPI cards
         kpis = {}
         kf = tk.Frame(right, bg=C["bg"]); kf.grid(row=0, sticky="ew", pady=(0,6))
         for i, (lbl, key, col) in enumerate([
-            ("Avg Profit",     "avg",     C["green"]),
-            ("Std Deviation",  "std",     C["amber"]),
-            ("Best Run",       "best",    C["teal"]),
-            ("Worst Run",      "worst",   C["red"]),
-            ("Avg Service %",  "service", C["blue"]),
-            ("Avg Waste %",    "waste",   C["purple"]),
+            ("Avg Profit", "avg", C["green"]),
+            ("Std Deviation", "std", C["amber"]),
+            ("Best Run", "best", C["teal"]),
+            ("Worst Run", "worst", C["red"]),
+            ("Avg Service %", "service", C["blue"]),
+            ("Avg Waste %", "waste", C["purple"]),
         ]):
             kf.columnconfigure(i, weight=1)
             c = self._card(kf); c.grid(row=0, column=i, padx=2, sticky="ew")
@@ -589,7 +522,6 @@ class InventoryGUI:
             tk.Label(c, textvariable=v, bg=C["card"], fg=col,
                      font=("Segoe UI",12,"bold")).pack(pady=(0,5))
 
-        # Chart area
         chart_area = self._card(right)
         chart_area.grid(row=1, sticky="nsew")
         tk.Label(chart_area, text="Press  ▶ Run  to see the simulation charts here.",
@@ -609,7 +541,6 @@ class InventoryGUI:
             res = mc.summary()
             ss  = mc.safety_stock()
 
-            # Update Critical Ratio display
             cr = p.critical_ratio()
             cr_lbl.config(
                 text=f"CR  =  Cu / (Cu + Co)\n"
@@ -617,13 +548,11 @@ class InventoryGUI:
                      f"    =  {cr}\n"
                      f"→  {'Keep MORE stock' if cr > 0.5 else 'Keep LESS stock'}")
 
-            # Update Safety Stock display
             ss_lbl.config(
                 text=f"SS  =  Z × σ × √(Lead Time)\n"
                      f"    =  1.65 × {p.demand_std:.1f} × √2\n"
                      f"    =  {ss} {p.unit}  (at 95% service level)")
 
-            # Update KPI cards
             kpis["avg"].set(f"₹{res['avg_profit']:,.0f}")
             kpis["std"].set(f"₹{res['std_profit']:,.0f}")
             kpis["best"].set(f"₹{res['best']:,.0f}")
@@ -631,19 +560,17 @@ class InventoryGUI:
             kpis["service"].set(f"{res['avg_service']}%")
             kpis["waste"].set(f"{res['avg_waste']}%")
 
-            # Save profits for Reports page
             self.last_mc_profits = res["profits"]
 
-            # Draw histograms
             for w in chart_area.winfo_children():
                 w.destroy()
 
             fig, axes = plt.subplots(1, 3, figsize=(11,3.8))
             fig.patch.set_facecolor("white")
             items = [
-                (axes[0], res["profits"],  C["green"], "Profit Distribution",        "Total Profit (₹)"),
+                (axes[0], res["profits"], C["green"], "Profit Distribution", "Total Profit (₹)"),
                 (axes[1], res["services"], C["blue"],  "Service Level Distribution", "Service Level (%)"),
-                (axes[2], res["wastes"],   C["red"],   "Waste Rate Distribution",    "Waste Rate (%)"),
+                (axes[2], res["wastes"], C["red"],   "Waste Rate Distribution", "Waste Rate (%)"),
             ]
             for ax, data, col, title, xlabel in items:
                 ax.hist(data, bins=22, color=col, edgecolor="white")
@@ -666,12 +593,9 @@ class InventoryGUI:
         self._btn(left, "🌵  Run with Drought scenario",
                   C["red"], lambda: run_sim(True)).pack(fill="x", padx=12, pady=3)
 
-    # ============================================================
-    #  PAGE 4 — REPORTS
-    # ============================================================
-
     def show_reports(self):
         self._clear()
+        self._refresh_alert()
         page = self._scrollable(self.content)
         tk.Label(page, text="Reports & Charts",
                  bg=C["bg"], fg=C["text"],
@@ -681,7 +605,6 @@ class InventoryGUI:
         import numpy as np
         inv = self.inv
 
-        # Chart 1: Demand vs Reorder Point
         c1 = self._card(page); c1.pack(fill="x", padx=20, pady=(0,10))
         self._section(c1, "Avg Daily Demand  vs  Reorder Point")
         names   = [p.name for p in inv.products]
@@ -703,7 +626,6 @@ class InventoryGUI:
             fill="x", padx=8, pady=(0,8))
         plt.close(fig1)
 
-        # Chart 2: Critical Ratio
         c2 = self._card(page); c2.pack(fill="x", padx=20, pady=(0,10))
         self._section(c2, "Critical Ratio by Product  [CR = Cu / (Cu + Co)]")
         crs    = [p.critical_ratio() for p in inv.products]
@@ -726,7 +648,6 @@ class InventoryGUI:
             fill="x", padx=8, pady=(0,8))
         plt.close(fig2)
 
-        # Chart 3: Last simulation profits
         c3 = self._card(page); c3.pack(fill="x", padx=20, pady=(0,20))
         self._section(c3, "Profit Distribution — Last Simulation Run")
         if self.last_mc_profits:
@@ -755,12 +676,9 @@ class InventoryGUI:
                      bg=C["card"], fg=C["muted"],
                      font=("Segoe UI",10)).pack(pady=24)
 
-    # ============================================================
-    #  PAGE 5 — SPOILAGE
-    # ============================================================
-
     def show_spoilage(self):
         self._clear()
+        self._refresh_alert()
         page = self._scrollable(self.content)
         tk.Label(page, text="Spoilage Tracker",
                  bg=C["bg"], fg=C["text"],
@@ -768,8 +686,6 @@ class InventoryGUI:
                      anchor="w", padx=20, pady=(14,8))
 
         inv = self.inv
-
-        # Freshness chart
         cc = self._card(page); cc.pack(fill="x", padx=20, pady=(0,10))
         self._section(cc, "Days Remaining Before Expiry")
         names     = [p.name       for p in inv.products]
@@ -796,7 +712,6 @@ class InventoryGUI:
             fill="x", padx=8, pady=(0,8))
         plt.close(fig)
 
-        # Expiry table
         sc = self._card(page); sc.pack(fill="x", padx=20, pady=(0,10))
         self._section(sc, "Expiry Status")
         self._table_hdr(sc,
@@ -823,7 +738,6 @@ class InventoryGUI:
                          font=("Segoe UI",9), width=w,
                          anchor="w").pack(side="left", padx=4, pady=6)
 
-        # Advance day button
         bc = self._card(page); bc.pack(fill="x", padx=20, pady=(0,20))
         self._section(bc, "Simulate Time Passing")
         tk.Label(bc,
@@ -845,9 +759,6 @@ class InventoryGUI:
 
         self._btn(bc, "⏭  Advance 1 Day  &  Check Spoilage",
                   C["red"], advance).pack(padx=14, pady=10, anchor="w")
-
-
-# ── Run ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     root = tk.Tk()
